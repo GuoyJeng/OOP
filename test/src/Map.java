@@ -6,17 +6,40 @@ import java.util.*;
 public class Map extends JPanel {
     private final int rows = 10;
     private final int cols = 10;
-    private final int cellSize = 50; // Pixels per square
+    private int cellSize = 50; // Pixels per square
     private final int[][] map = new int[rows][cols];
     private int hoverRow = -1;
     private int hoverCol = -1;
+//    private int offsetX = 0; // ตำแหน่ง X เริ่มต้น
+//    private int offsetY = 0; // ตำแหน่ง Y เริ่มต้น
+//    private Point lastMousePt; // เก็บตำแหน่งเมาส์ล่าสุดที่คลิก
     public Map() {
         this.setBackground(Color.BLACK);
         generateRandomMap(); // เรียกใช้ฟังก์ชันสุ่มตอนสร้าง Object
+        this.addMouseWheelListener(new MouseWheelListener() {
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                // e.getWheelRotation() จะคืนค่า -1 (กลิ้งขึ้น/ซูมเข้า) หรือ 1 (กลิ้งลง/ซูมออก)
+                if (e.getWheelRotation() < 0) {
+                    // ซูมเข้า: เพิ่มขนาดช่อง (จำกัดไม่ให้ใหญ่เกินไป เช่น 150)
+                    if (cellSize < 150) {
+                        // ถ้า cellSize ไม่ได้เป็น static หรือ final คุณสามารถปรับค่าได้ที่นี่
+                        // แต่ในโค้ดเดิมคุณตั้งเป็น final ไว้ ต้องเอา final ออกก่อนครับ
+                        updateCellSize(5);
+                    }
+                } else {
+                    // ซูมออก: ลดขนาดช่อง (จำกัดไม่ให้เล็กเกินไป เช่น 10)
+                    if (cellSize > 10) {
+                        updateCellSize(-5);
+                    }
+                }
+            }
+        });
         this.addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
                 super.mouseMoved(e);
+//                System.out.println(e.getX() + " " + e.getY());
                 Point cell = getGridPoint(e.getX(), e.getY());
                 int row = cell.y;
                 int col = cell.x;
@@ -59,6 +82,11 @@ public class Map extends JPanel {
                 }
             }
         });
+    }
+
+    private void updateCellSize(int delta) {
+        cellSize += delta;
+        repaint(); // สำคัญมาก! เพื่อให้หน้าจอวาดใหม่ทันทีที่เปลี่ยนขนาด
     }
 
     private Point getGridPoint(int mouseX, int mouseY) {
@@ -141,7 +169,7 @@ public class Map extends JPanel {
     public static void main() {
         JFrame frame = new JFrame("Test Map");
         frame.add(new Map(), BorderLayout.CENTER);
-        frame.setSize(600, 600);
+        frame.setSize(1280, 720);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
