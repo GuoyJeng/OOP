@@ -6,32 +6,28 @@ import java.util.*;
 public class Map extends JPanel {
     private final int rows = 10;
     private final int cols = 10;
-    private int cellSize = 50; // Pixels per square
     private final int[][] map = new int[rows][cols];
     private int hoverRow = -1;
     private int hoverCol = -1;
-//    private int offsetX = 0; // ตำแหน่ง X เริ่มต้น
-//    private int offsetY = 0; // ตำแหน่ง Y เริ่มต้น
-//    private Point lastMousePt; // เก็บตำแหน่งเมาส์ล่าสุดที่คลิก
+    private final Camera camera = new Camera();
+
     public Map() {
         this.setBackground(Color.BLACK);
         generateRandomMap(); // เรียกใช้ฟังก์ชันสุ่มตอนสร้าง Object
         this.addMouseWheelListener(new MouseWheelListener() {
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                // e.getWheelRotation() จะคืนค่า -1 (กลิ้งขึ้น/ซูมเข้า) หรือ 1 (กลิ้งลง/ซูมออก)
-                if (e.getWheelRotation() < 0) {
-                    // ซูมเข้า: เพิ่มขนาดช่อง (จำกัดไม่ให้ใหญ่เกินไป เช่น 150)
-                    if (cellSize < 150) {
-                        // ถ้า cellSize ไม่ได้เป็น static หรือ final คุณสามารถปรับค่าได้ที่นี่
-                        // แต่ในโค้ดเดิมคุณตั้งเป็น final ไว้ ต้องเอา final ออกก่อนครับ
-                        updateCellSize(5);
+                // ยอมให้เปลี่ยนขนาดเฉพาะตอนที่ไม่ได้ Lock เป้าหมาย (ไม่ได้ Click Zoom)
+                // หรือถ้าอยากให้ซูมต่อจากที่ Click แล้วได้ ก็เอา !camera.isZoomed() ออก
+                if (!camera.getIsZoomed()) {
+                    int newSize = camera.getCurrentCellSize();
+                    if (e.getWheelRotation() < 0) {
+                        if (newSize < 150) newSize += 5;
+                    } else {
+                        if (newSize > 10) newSize -= 5;
                     }
-                } else {
-                    // ซูมออก: ลดขนาดช่อง (จำกัดไม่ให้เล็กเกินไป เช่น 10)
-                    if (cellSize > 10) {
-                        updateCellSize(-5);
-                    }
+                    camera.setCurrentCellSize(newSize);
+                    repaint();
                 }
             }
         });
@@ -39,8 +35,9 @@ public class Map extends JPanel {
             @Override
             public void mouseMoved(MouseEvent e) {
                 super.mouseMoved(e);
-//                System.out.println(e.getX() + " " + e.getY());
-                Point cell = getGridPoint(e.getX(), e.getY());
+                // ส่งค่า width/height ปัจจุบันให้ camera คำนวณ
+                Point cell = camera.getGridPoint(e.getX(), e.getY(), getWidth(), getHeight(), rows, cols);
+
                 int row = cell.y;
                 int col = cell.x;
 
@@ -61,48 +58,29 @@ public class Map extends JPanel {
             @Override
             public void mouseDragged(MouseEvent e) {
                 super.mouseDragged(e);
+
             }
         });
         this.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 super.mousePressed(e);
-                Point cell = getGridPoint(e.getX(), e.getY());
-                int row = cell.y;
-                int col = cell.x;
+                // 1. หาตำแหน่ง Grid
+                Point cell = camera.getGridPoint(e.getX(), e.getY(), getWidth(), getHeight(), rows, cols);
 
-                if (row >= 0 && row < rows && col >= 0 && col < cols) {
-                    int cellValue = map[row][col];
-
-                    if (cellValue == 0) {
-                        System.out.println("คลิกช่องนี้สีเขียว (ค่าคือ 0)");
-                    } else if (cellValue == 1) {
-                        System.out.println("คลิกช่องนี้สีน้ำเงิน (ค่าคือ 1)");
-                    }
+                // 2. ถ้า Click ใน Grid ให้สลับโหมดซูม
+                if (cell.y >= 0 && cell.y < rows && cell.x >= 0 && cell.x < cols) {
+                    // เรียกฟังก์ชันใน Camera ให้คำนวณ Offset ใหม่
+                    camera.zoomToCell(cell.x, cell.y, getWidth(), getHeight());
+                } else if (camera.getIsZoomed()) {
+                    // ถ้าคลิกพื้นที่ว่างๆ ตอนซูมอยู่ ให้ Reset
+                    camera.resetZoom();
                 }
+
+                // 3. สั่งวาดใหม่
+                repaint();
             }
         });
-    }
-
-    private void updateCellSize(int delta) {
-        cellSize += delta;
-        repaint(); // สำคัญมาก! เพื่อให้หน้าจอวาดใหม่ทันทีที่เปลี่ยนขนาด
-    }
-
-    private Point getGridPoint(int mouseX, int mouseY) {
-        int startX = (getWidth() - (cols * cellSize)) / 2;
-        int startY = (getHeight() - (rows * cellSize)) / 2;
-        int row = (mouseY - startY) / cellSize;
-        int relativeX = mouseX - startX;
-        int col;
-
-        if (row >= 0 && row < rows && row % 2 == 0) {
-            // แถวคู่ ภาพถูกเลื่อนไปทางซ้าย cellSize/2 ดังนั้นต้องบวกคืนก่อนคำนวณ index
-            col = (relativeX + (cellSize / 2)) / cellSize;
-        } else {
-            col = relativeX / cellSize;
-        }
-        return new Point(col, row);
     }
 
     private void generateRandomMap() {
@@ -123,17 +101,21 @@ public class Map extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        int startX = (getWidth() - (cols * cellSize)) / 2;
-        int startY = (getHeight() - (rows * cellSize)) / 2;
+        Point startPt = camera.getDrawOffset(getWidth(), getHeight(), rows, cols);
+        int cellSize = camera.getCurrentCellSize();
+
         Graphics2D g2d = (Graphics2D) g;
+        // เปิด Anti-aliasing ให้เส้นคมชัดขึ้น
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                int x = startX + j * cellSize;
-                int y = startY + i * cellSize;
+                int x = startPt.x + j * cellSize;
+                int y = startPt.y + i * cellSize;
                 int drawX = x;
                 int drawW = cellSize;
 
-                // คำนวณค่า x และ ค่า width เพราะจะไม่ให้มันคำนวณครึ่งช่อง
+                // Logic การวาดแบบเยื้อง
                 if (i % 2 == 0) {
                     if (j == 0) {
                         drawW = cellSize / 2;
@@ -142,12 +124,9 @@ public class Map extends JPanel {
                     }
                 }
 
-                if (j == 0 && i % 2 == 0) {
-                    g2d.setColor(Color.black);
-                    continue;
-                }
+                if (j == 0 && i % 2 == 0) continue;
 
-                //สุ่มตำแหน่งพื้นที่เล่น
+                // วาดสีพื้น
                 if (map[i][j] == 1) {
                     g2d.setColor(Color.BLUE);
                 } else {
@@ -155,13 +134,14 @@ public class Map extends JPanel {
                 }
                 g2d.fillRect(drawX, y, drawW, cellSize);
 
-                //เช็คว่าเมาส์อยู่ในตำแหน่งเดียวกับช่องสีเปลาส
+                // วาดเส้นขอบ (Hover หรือ ปกติ)
                 if (i == hoverRow && j == hoverCol) {
                     g2d.setColor(Color.WHITE);
+                    g2d.setStroke(new BasicStroke(3)); // หนาขึ้นตอน Hover
                 } else {
-                    g2d.setColor(Color.black);
+                    g2d.setColor(Color.BLACK);
+                    g2d.setStroke(new BasicStroke(1));
                 }
-                g2d.setStroke(new BasicStroke(2));
                 g2d.drawRect(drawX, y, drawW, cellSize);
             }
         }
